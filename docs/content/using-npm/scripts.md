@@ -33,6 +33,7 @@ There are some special life cycle scripts that happen only in certain situations
 * Runs on local `npm install` without any arguments
 * Run AFTER `prepublish`, but BEFORE `prepublishOnly`
 * NOTE: If a package being installed through git contains a `prepare` script, its `dependencies` and `devDependencies` will be installed, and the prepare script will be run, before the package is packaged and installed.
+* As of `npm@7` these scripts run in the background
 
 **prepublish** (DEPRECATED)
 * Same as `prepare`
@@ -74,51 +75,108 @@ The advantage of doing these things at `prepublish` time is that they can be don
 
 ### Life Cycle Operation Order
 
-#### [`npm publish`](/commands/npm-publish)
+#### [`npm cache add`](/commands/npm-cache)
 
-* `prepublishOnly`
 * `prepare`
-* `prepublish`
-* `publish`
-* `postpublish`
 
-#### [`npm pack`](/commands/npm-pack)
-
-* `prepack`
-* `postpack`
-
-#### [`npm install`](/commands/npm-install)
+#### [`npm ci`](/commands/npm-ci)
 
 * `preinstall`
 * `install`
 * `postinstall`
+* `prepublish`
+* `preprepare`
+* `prepare`
+* `postprepare`
 
-Also triggers
+#### [`npm diff`](/commands/npm-diff)
 
-* `prepublish` (when on local)
-* `prepare` (when on local or workspaces)
+* `prepare`
+
+#### [`npm env`](/commands/npm-env)
+
+* `env` (You can override the default behavior of `npm env` by defining
+    a custom `env` entry in your `scripts` object)
+
+#### [`npm install`](/commands/npm-install)
+
+These also run when you run `npm install -g <pkg-name>`
+
+* `preinstall`
+* `install`
+* `postinstall`
+* `prepublish`
+* `preprepare`
+* `prepare`
+* `postprepare`
+
+If there is a `binding.gyp` file in the root of your package and you
+haven't defined your own `install` or `preinstall` scripts, npm will
+default the `install` command to compile using node-gyp via `node-gyp
+rebuild`
+
+These are run from the scripts of `<pkg-name>`
+
+#### [`npm pack`](/commands/npm-pack)
+
+* `prepack`
+* `prepare`
+* `postpack`
+
+#### [`npm publish`](/commands/npm-publish)
+
+* `prepublishOnly`
+* `prepack`
+* `prepare` (not during `--dry-run`)
+* `postpack`
+* `publish`
+* `postpublish`
+
+#### [`npm rebuild`](/commands/npm-rebuild)
+
+* `preinstall`
+* `install`
+* `postinstall`
+* `prepare` (links only)
+
+#### [`npm restart`](/commands/npm-restart)
+
+If there is a `restart` script defined, these events are run, otherwise
+`stop` and `start` are both run if present, including their `pre` and
+`post` iterations)
+
+* `prerestart`
+* `restart`
+* `postrestart`
+
+#### [`npm run <user defined>`](/commands/npm-run)
+
+* `pre<user-defined>`
+* `<user-defined>`
+* `post<user-defined>`
 
 #### [`npm start`](/commands/npm-start)
-
-`npm run start` has an `npm start` shorthand.
 
 * `prestart`
 * `start`
 * `poststart`
 
-### Default Values
-npm will default some script values based on package contents.
+If there is a `server.js` file in the root of your package, then npm
+will default the `start` command to `node server.js`.  `prestart` and
+`poststart` will still run in this case.
 
-* `"start": "node server.js"`:
+#### [`npm stop`](/commands/npm-stop)
 
-  If there is a `server.js` file in the root of your package, then npm
-  will default the `start` command to `node server.js`.
+* `prestop`
+* `stop`
+* `poststop`
 
-* `"install": "node-gyp rebuild"`:
+#### [`npm test`](/commands/npm-test)
 
-  If there is a `binding.gyp` file in the root of your package and you
-  haven't defined your own `install` or `preinstall` scripts, npm will
-  default the `install` command to compile using node-gyp.
+* `pretest`
+* `test`
+* `posttest`
+
 
 ### User
 
@@ -131,7 +189,6 @@ Package scripts run in an environment where many pieces of information
 are made available regarding the setup of npm and the current state of
 the process.
 
-
 #### path
 
 If you depend on modules that define executable scripts, like test
@@ -139,14 +196,14 @@ suites, then those executables will be added to the `PATH` for
 executing the scripts.  So, if your package.json has this:
 
 ```json
-{ 
-  "name" : "foo", 
-  "dependencies" : { 
-    "bar" : "0.1.x" 
-  }, 
-  "scripts": { 
-    "start" : "bar ./test" 
-  } 
+{
+  "name" : "foo",
+  "dependencies" : {
+    "bar" : "0.1.x"
+  },
+  "scripts": {
+    "start" : "bar ./test"
+  }
 }
 ```
 
@@ -159,8 +216,8 @@ The package.json fields are tacked onto the `npm_package_` prefix. So,
 for instance, if you had `{"name":"foo", "version":"1.2.5"}` in your
 package.json file, then your package scripts would have the
 `npm_package_name` environment variable set to "foo", and the
-`npm_package_version` set to "1.2.5".  You can access these variables 
-in your code with `process.env.npm_package_name` and 
+`npm_package_version` set to "1.2.5".  You can access these variables
+in your code with `process.env.npm_package_name` and
 `process.env.npm_package_version`, and so on for other fields.
 
 #### configuration
@@ -176,14 +233,14 @@ there is a config param of `<name>[@<version>]:<key>`.  For example,
 if the package.json has this:
 
 ```json
-{ 
-  "name" : "foo", 
-  "config" : { 
-    "port" : "8080" 
-  }, 
-  "scripts" : { 
-    "start" : "node server.js" 
-  } 
+{
+  "name" : "foo",
+  "config" : {
+    "port" : "8080"
+  },
+  "scripts" : {
+    "start" : "node server.js"
+  }
 }
 ```
 
@@ -219,10 +276,10 @@ process.env.npm_package_scripts_install === "foo.js"
 For example, if your package.json contains this:
 
 ```json
-{ 
-  "scripts" : { 
-    "install" : "scripts/install.js", 
-    "postinstall" : "scripts/postinstall.js", 
+{
+  "scripts" : {
+    "install" : "scripts/install.js",
+    "postinstall" : "scripts/postinstall.js",
     "uninstall" : "scripts/uninstall.js"
   }
 }
@@ -239,10 +296,10 @@ If you want to run a make command, you can do so.  This works just
 fine:
 
 ```json
-{ 
-  "scripts" : { 
-    "preinstall" : "./configure", 
-    "install" : "make && make install", 
+{
+  "scripts" : {
+    "preinstall" : "./configure",
+    "install" : "make && make install",
     "test" : "make test"
   }
 }
